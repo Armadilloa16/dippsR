@@ -1,0 +1,422 @@
+\documentclass{article}
+
+\begin{document}
+
+\section{Aims}
+
+So the point of this is multi-faceted:
+\begin{itemize}
+  \item To provide a tutorial/introduction and access 
+  to the use of some of the crappy R code I wrote in 
+  the process of analysing peaklist MALDI imaging data 
+  during my thesis.
+  \item To provide some example code on how (not) to 
+  use R, {\tt knitr}, and \LaTeX together, including 
+  referencing using {\tt bibtex}.
+\end{itemize}
+
+\section{Disclaimer}
+
+This code is a steaming pile of crap. 
+Use it with extreme skeptisism -- as you should use any 
+software, and do any analysis, skeptisism is the 
+lifeblood of a scientist, embrace it.
+When I get some free time I plan on re-writing all the 
+plotting functions from scratch to make them nicer.
+Which should make this steaming pile of crap slightly
+more bearable.
+
+Also, I really ought to have wrapped my code up in a 
+package, but I am shit and haven't, so for the time 
+being all the relevant functions can be loaded into the \
+workspace by calling
+<<localFunctions, cache=FALSE>>=
+source('localFunctions.R')
+@
+the fact that this is here may prompt me to getting 
+around to cleaning it up and wrapping it up in package
+form at some point in the future, but probably not in
+the immediate future.
+
+
+\section{Setup and Reading Peaklists}
+
+
+I set the current {\tt dataset\_name} to a variable,
+<<dataset_name, cache=TRUE>>=
+dataset_name <- "A1"
+@
+
+and then call 
+<<read_data, dependson="dataset_name", cache=TRUE, include=TRUE>>=
+pl_all <- readPeaklists(dataset_name)
+@
+
+This reads in peaklist files from 
+\begin{verbatim} 
+<parent_folder_name>/<dataset_name>/<peaklist_folder_name>
+\end{verbatim}
+and returns a combined peaklist {\tt data.frame } object
+after writing the three files: 
+\begin{verbatim} 
+<dataset_name>_comprehensive_peaklist.txt 
+<dataset_name>_fExists.txt
+<dataset_name>_LXY.txt
+\end{verbatim} 
+to 
+\begin{verbatim} 
+./<data_folder>
+\end{verbatim} 
+{\tt dataset\_name } is required, but the other 
+arguments are optional and default to:
+\begin{itemize}
+  \item {\tt peaklist\_folder\_name  = "peaklists" }
+  \item {\tt parent\_folder\_name = "." }
+  \item {\tt data\_folder = "./data" }
+\end{itemize}
+Note that the function {\tt readPeaklists} reads 
+peaklists in batches of $1000$ at a time, and at the 
+end of each batch prints the name of the last peaklist 
+file to inform the user of progress, finally it prints
+the total number of empty peaklists read in.
+
+
+Once created the files written to {\tt data\_folder} 
+can be read in easily by calling
+<<load_data, cache=TRUE, dependson="read_data">>=
+pl_all  <- load_peaklist(dataset_name)
+LXY     <- load_LXY(dataset_name)
+fExists <- load_fExists(dataset_name)
+@
+respectively.
+These {\tt load\_*} functions also accept an optional 
+{\tt data\_folder} argument if an alternative location
+is used to store these files.
+
+
+\section{Peak Grouping and Peaklist Subsets}
+
+There are three functions included for assigning 
+`peakgroup' labels to peaks:
+
+\subsection{Mass Matching}
+\label{sec:mm}
+
+Peaks can be matched to known masses by mass-error.
+In these data for example, there are some internal 
+calibrants of known mass, as described by 
+\cite{Gustafsson2012}.
+<<cal_info, cache=TRUE>>=
+cal_df = data.frame(m.z = c(1296.685,
+                            1570.677,
+                            2147.199,
+                            2932.588
+                    ),
+                    name = c('Angiotensin I',
+                             '[Glu1]-Fibrinopeptide B',
+                             'Dynorphin A',
+                             'ACTH fragment (1–24)'
+                    )
+)
+@
+
+The function {\tt mzMatch} extracts peaks 
+from the first argument about the $m/z$ values in the 
+second argument.
+<<mass_matching, cache=TRUE, dependson=c("load_data","cal_info")>>=
+pl_cal <- mzMatch(pl_all,cal_df$m.z)
+@
+Optional arguments {\tt binMargin} (mass error to be 
+allowed) and {\tt use\_ppm} (mass error measured in ppm 
+or Da) can also be specified, but otherwise default to:
+\begin{itemize}
+  \item {\tt binMargin} $=0.3$, and
+  \item {\tt use\_ppm} $=$ FALSE.
+\end{itemize}
+The function {\tt mzMatch} returns the 
+subset of the input peaklist with an added column,
+{\tt PeakGroup}, specifying the theoretical mass that
+peak is matched too.
+Not sure how this would react to overlapping mass
+windows but it was not intended for that.
+  
+\subsection{Tolerance Clustering}
+
+When the masses of interest are not known, peakgroups
+can be formed via a one-dimensional clustering of the
+$m/z$ values of the peaks. Tolerance Clustering is one 
+of the simplest ways of doing this, and boils down to 
+finding the equivalence classes of the relation defined
+on two peaks as `being within some tolerance {\tt tol}
+of each other'.
+<<tol_clus, cache=TRUE, dependson="load_data">>=
+pl_tol <- groupPeaks(pl_all)
+@
+The optional tolerance argument {\tt tol} defaults to a 
+value of $0.1$Da, and an additional optional argument 
+{\tt minGroupSize} can be specified to label any 
+equivalence classes with less than that many peaks in 
+them zero. By default all peaks will be labeled.
+The function {\tt groupPeaks} returns the the input 
+peaklist with an added column, {\tt PeakGroup}, 
+specifying a peakgroup label.
+
+
+\subsection{{\tt DBSCAN}}
+
+A more sophisticated clustering approach is to use a 
+density based clustering such as {\tt DBSCAN}, or more
+precisely its deterministic version {\tt DBSCAN*}, as 
+described in \cite{Campello2013}.
+<<dbscan_clus, cache=TRUE, dependson="load_data">>=
+pl_dbs <- dbscan_lw(pl_all,pp=FALSE)
+@
+The function {\tt dbscan\_lw} works similarly to the 
+function {\tt groupPeaks}, in that it takes a peaklist 
+and returns the same peaklist with an added column, 
+{\tt PeakGroup}, containing a peakgroup label.
+The function {\tt dbscan\_lw} also takes optional 
+arguments {\tt eps} (similar to the {\tt tol} of the 
+tolerance clustering, specifying the width of the 
+rectangular kernal used), {\tt mnpts} (the minimum 
+number of points within a {\tt eps}-neighbourhood
+considered significant -- adjusting {\tt mnpts} can fix 
+the problem in large datasets of different masses being
+combined), {\tt cvar} (specifying the variable in the
+input peaklist to be clustered) and {\tt pp} (print 
+progress to console logical). These optional arguments 
+default to:
+\begin{itemize}
+  \item {\tt eps} $=0.05$,
+  \item {\tt mnpts} $=100$,
+  \item {\tt cvar} $=${\tt "m.z"}, and
+  \item {\tt pp} $=${\tt TRUE}
+\end{itemize}
+
+
+
+
+
+
+\section{Simple Plots}
+I also have some functions that make plots specially 
+for peaklist data. 
+This part is the most hacked up, as I have repeatadly 
+modified these functions to perform various different
+tasks, while trying to maintain backwards compatability
+and its all ended in a giant mess.
+These are such a mess I am not even going to bother 
+trying to explain them, and instead just reccomend you 
+write your own plotting functions, as then you can be 
+sure your plotting the thing you want to plot. 
+Your also welcome to look at the code under 
+{\tt spatialPlot} and {\tt acquisitionPlot} and 
+canabilise code to your hearts content.
+I provide an example of one use of the function 
+{\tt spatialPlot} below when I produce a DIPPS map 
+using it, although it can do alot more than this -- I 
+plan on coming back and re-writing the plotting 
+functions at some point so they make more sense.
+
+\section{DIPPS}
+
+Now say you have produced some peakgroups one way or
+another, and now you have two regions you want to 
+compare using DIPPS. 
+For example, here I have annotation of the center of 
+cancer tumours stored in an xml `ROI' file.
+So I'll read the annotations into R using the 
+{\tt XML} package and merge them onto the {\tt LXY} 
+variable as a `ROI' column with value `None' for 
+spectra not in any annotated region.
+<<rois, cache=TRUE>>=
+library(XML)
+fname <- 'A1_annotation.xml'
+doc   = xmlInternalTreeParse(fname)
+rois  = xpathSApply(doc,
+                   "/ClinProtSpectraImport/Class",
+                   xmlGetAttr,"Name")
+nSpec = xpathSApply(doc,
+                    "/ClinProtSpectraImport/Class",
+                    xmlSize)
+spec  = xpathSApply(doc,
+                    "/ClinProtSpectraImport/Class/Element",
+                    xmlGetAttr,"Path")
+temp  = data.frame(Peaklist = Peaklist_ID(spec),
+                   ROI = rep(rois,nSpec),
+                   stringsAsFactors = FALSE)
+LXY <- merge(LXY,temp,
+             all.x = TRUE)
+LXY[is.na(LXY$ROI),'ROI'] = "None"
+@
+
+We can take a quick look at these annotations by 
+plotting them. Figure~\ref{fig:plot_rois} demonstrates
+this, as well as providing a simple (less confusing?)
+example of a straightforward way to make spatial plots
+without using my gargantuan {\tt spatialPlot} function
+(although you could equally make this plot using 
+{\tt spatialPlot} if you really wanted to.
+
+<<plot_rois, cache=TRUE, dependson="rois", fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
+p = (ggplot(LXY,aes(x=X,y=Y,
+                    fill=ROI,
+                    alpha= 1-(ROI=='None')),
+            colour=NA)
+     + geom_tile()
+     + coord_fixed()
+     + guides(alpha = FALSE)     
+     + scale_x_reverse(breaks=seq(75,175, 50))
+     + scale_y_continuous(breaks=seq(50, 200, 50))
+     + ylab("")
+     + xlab("")
+)
+# Annotation Regions
+print(p)
+@
+
+Now I create a simplified peaklist variable 
+{\tt pl\_uni} which intially has only two variables,
+{\tt Acquisition} (indexing the originating 
+spectrum) and {\tt PeakGroup} (indexing the peakgroup).
+I also make sure the rows of {\tt pl\_uni} are unique --
+this is important, as having multiple peaks from the 
+same peakgroup in the same spectrum will otherwise 
+affect your results, although in the senario that this 
+occurs more than a couple of times I would suggest 
+perhaps revisiting whatever decisions you made at your
+peakgrouping step.
+I add a third variable, {\tt Group} to the peaklist 
+{\tt pl\_uni}, identifying each peak as originating 
+from either an annotated region ($2$), or not ($1$).
+Now that we have cleaned up {\tt pl\_uni} and ensured 
+it has the three neccessary columns, and that they are 
+correctly formatted we can plug this right into the 
+{\tt DIPPS} function.
+
+<<dipps, cache=TRUE, dependson="tol_clus">>=
+pl_uni = unique(pl_tol[,c("Acquisition","PeakGroup")])
+temp = match(pl_uni$Acquisition,LXY$Acquisition)
+pl_uni$Group = 1+(LXY[temp,]$ROI != "None")
+
+dipsum = DIPPS(pl_uni)
+nStar = dippsHeur(pl_uni,dipsum)
+@
+
+Note that in this case I used {\tt pl\_tol} to make 
+{\tt pl\_uni} which I used in the DIPPS analyses -- this
+was the peaklist with the {\tt PeakGroup} column 
+created by tolerance clustering. 
+I could easily have used {\tt pl\_dbs} or even 
+{\tt p\_cal} (if I was only interested in the 
+calibrants) instead of {\tt pl\_tol}. 
+Another option would be to bin the peaks in a 
+data-independant manner using the R {\tt base} function
+{\tt cut} -- a potentially useful option when 
+interested in prediction, because of its independance 
+on the data.
+
+Also note how I generate {\tt nStar}, which is the 
+number of variables suggested to be optimal by the 
+heuristic. 
+One way to visualise these top {\tt nStar} `DIPPS 
+features' is in a `DIPPS map', so I might as well 
+demonstrate how to do that using the hugely dodgey 
+{\tt spatialPlot} function:
+
+<<dipps_map, cache=TRUE, dependson="dipps", fig.cap='DIPPS Map', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
+dipsum = dipsum[rev(order(dipsum$d)),]
+peakgroups = dipsum[1:nStar,"PeakGroup"]
+plp = pl_uni[!is.na(match(pl_uni$PeakGroup,peakgroups)),]
+p = spatialPlot(plp,
+                fExists,
+                plot_var = "count",
+                save_plot = FALSE,
+                minX_in = min(LXY$X),
+                minY_in = min(LXY$X)
+)
+p = (p + scale_x_reverse(breaks=seq(75,175, 50))
+     + scale_y_continuous(breaks=seq(50, 200, 50))
+     + ylab("")
+     + xlab("")
+)
+# DIPPS Map
+print(p)
+@
+
+One could also produce individual intensity plots of 
+particular peakgroups, for example for the peakgroup 
+with highest DIPPS statistic value: 
+
+<<ion_map, cache=TRUE, dependson="dipps_map", fig.cap='Intensity Map for peakgroup most highly ranked by DIPPS', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
+plp = subset(pl_tol,PeakGroup==dipsum[1,"PeakGroup"])
+p = spatialPlot(plp,
+                fExists,
+                save_plot = FALSE,
+                minX_in = min(LXY$X),
+                minY_in = min(LXY$X)
+)
+p = (p + scale_x_reverse(breaks=seq(75,175, 50))
+     + scale_y_continuous(breaks=seq(50, 200, 50))
+     + ylab("")
+     + xlab("")
+)
+# Intensity Map
+print(p)
+@
+
+and you could calculate `Abundance Weighted Means' 
+(weighting $m/z$ values by intensity, or in the 
+following example signal-to-noise ratio) or various 
+other statistics for these peakgroups as well if you 
+wanted. For example:
+
+<<awm, cache=TRUE, dependson="dipps_map">>=
+pg_df = ddply(pl_tol,
+              "PeakGroup",
+              summarise,
+              AWM = weighted.mean(m.z,SN),
+              Range = max(m.z) - min(m.z),
+              nDupPeaks = length(Acquisition) - 
+                length(unique(Acquisition))
+)
+pg_df = merge(pg_df,dipsum)
+pg_df = pg_df[rev(order(pg_df$d)),]
+head(pg_df)
+pg_df[57:61,]
+@
+
+In addition to calculating the AWM here I have 
+also calculated the $m/z$ range over which each 
+peakgroup spans, and the number of duplicated peaks 
+(a number above zero indicated there are individual 
+spectra with more than one peak in the indicated 
+peakgroup).
+Notice that the most highly ranked variables by DIPPS 
+seem fine, but that there are some (AWM = $1155$ and 
+AWM = $1776$) for which it seems the peakgrouping has 
+failed pretty badly, producing peakgroups that span 
+$4.16$Da and $2.789$Da respectively.
+Note that you can look at such things without having 
+done the DIPPS step, and it is worth doing so as a 
+quality-control/sanity-check step.
+You could for example try using the dbscan peakgroups
+instead -- I'll leave that as an exercise.
+
+
+
+
+\pagebreak
+\bibliographystyle{plain}
+\bibliography{references}
+\section*{Session Info and pdflatex Version}
+
+<<sessioninfo, echo=TRUE, results='markup',cache=FALSE, size='footnotesize'>>=
+sessionInfo()
+@
+
+<<pdflatex_version, echo=TRUE, message=TRUE, warning=TRUE,cache=FALSE, size='footnotesize'>>=
+system('pdflatex --version',intern=TRUE)
+@
+
+\end{document}
