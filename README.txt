@@ -15,3 +15,11 @@ tute.Rnw provides both:
  - a step-by-step explanation of how to 
      use most of the code in 
      localFunctions.R 
+
+Note that chunk output is stored in 
+./cache -- of particular note is the
+intial reading in of the peaklists in 
+chunk `read_data', in order to reproduce 
+this one would need to unpack the 
+`A1.7z' archive containing the raw 
+peaklist data.
