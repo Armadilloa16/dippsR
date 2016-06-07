@@ -219,6 +219,7 @@ peak group:
 pgs_tol <- ddply(pl_tol,
                  "PeakGroup",
                  summarise,
+                 AWM = weighted.mean(m.z,log1p(intensity)),
                  Range = max(m.z) - min(m.z),
                  nPeaks  = length(m.z),
                  nDupPeaks  = (length(m.z) 
@@ -226,6 +227,7 @@ pgs_tol <- ddply(pl_tol,
 pgs_dbs <- ddply(subset(pl_dbs, PeakGroup!=0),
                  "PeakGroup",
                  summarise,
+                 AWM = weighted.mean(m.z,log1p(intensity)),
                  Range = max(m.z) - min(m.z),
                  nPeaks  = length(m.z),
                  nDupPeaks  = (length(m.z) 
@@ -233,6 +235,11 @@ pgs_dbs <- ddply(subset(pl_dbs, PeakGroup!=0),
 @
 In particular: 
 \begin{itemize}
+  \item The {\tt AWM}: the abundance weighted mean 
+  \emph{m/z} of peaks in the peakgroup -- this is mostly 
+  useful for reference when matching particular peakgroups
+  of interest to LC-MS/MS identifications, or some such, 
+  for example.
  \item The {\tt Range}: the difference between 
   the minimum and maximum \emph{m/z} in the peak group.
   \item The {\tt nPeaks}: the number of peaks in the 
@@ -421,6 +428,7 @@ correctly formatted we can plug this right into the
 
 <<dipps, dependson="tol_clus">>=
 pl_uni = unique(pl_tol[,c("Acquisition","PeakGroup")])
+pl_uni = subset(pl_uni,PeakGroup!=0)
 temp = match(pl_uni$Acquisition,LXY$Acquisition)
 pl_uni$Group = 1+(LXY[temp,]$ROI != "None")
 
@@ -490,28 +498,18 @@ p = (p + scale_x_reverse(breaks=seq(75,175, 50))
 print(p)
 @
 
-and you could calculate `Abundance Weighted Means' 
-(weighting $m/z$ values by intensity, or in the 
-following example signal-to-noise ratio) or various 
-other statistics for these peakgroups as well if you 
+and you could for example have a look at the {\tt AWM}
+or various other statistics for these peakgroups if you 
 wanted. For example:
 
-<<awm, dependson="dipps_map">>=
-pg_df = ddply(pl_tol,
-              "PeakGroup",
-              summarise,
-              AWM = weighted.mean(m.z,SN),
-              Range = max(m.z) - min(m.z),
-              nDupPeaks = length(Acquisition) - 
-                length(unique(Acquisition))
-)
-pg_df = merge(pg_df,dipsum)
-pg_df = pg_df[rev(order(pg_df$d)),]
-print(head(pg_df), digits=3)
-print(pg_df[57:61,], digits=3)
+<<awm, dependson=c("dipps_map","pgs_dbs")>>=
+pgs_tol = merge(pgs_tol,dipsum)
+pgs_tol = pgs_tol[rev(order(pgs_tol$d)),]
+print(head(pgs_tol), digits=3)
+print(pgs_tol[57:61,], digits=3)
 @
 
-In addition to calculating the AWM here I have 
+In addition to calculating the {\tt AWM} here I have 
 also calculated the $m/z$ range over which each 
 peakgroup spans, and the number of duplicated peaks 
 (a number above zero indicated there are individual 

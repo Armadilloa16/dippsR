@@ -23,3 +23,8 @@ chunk `read_data', in order to reproduce
 this one would need to unpack the 
 `A1.7z' archive containing the original
 peaklist data.
+
+TODO:
+
+Add a section on making ROC curves maybe? 
+Meh.
