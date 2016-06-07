@@ -1,0 +1,158 @@
+\documentclass{article}
+
+<<set_default_chunk_options,cache=FALSE,echo=FALSE>>=
+opts_chunk$set(echo=TRUE,
+               warning=TRUE,
+               error=TRUE,
+               message=TRUE,
+               include=TRUE,
+               cache=FALSE)
+@
+
+\begin{document}
+
+\section{Aims}
+
+So the point of this is multi-faceted:
+\begin{itemize}
+  \item To provide a tutorial/introduction and access 
+  to the use of some of the crappy R code I wrote in 
+  the process of analysing peaklist MALDI imaging data 
+  during my thesis.
+  \item To provide some example code on how (not) to 
+  use R, {\tt knitr}, and \LaTeX{}, including 
+  referencing using {\tt bibtex}.
+\end{itemize}
+
+\section{Disclaimer}
+
+This code is a steaming pile of crap. 
+Use it with extreme skeptisism -- as you should use any 
+software, and do any analysis, skeptisism is the 
+lifeblood of a scientist, embrace it.
+When I get some free time I plan on re-writing all the 
+plotting functions from scratch to make them nicer.
+Which should make this steaming pile of crap slightly
+more bearable.
+
+Also, I really ought to have wrapped my code up in a 
+package, but I am shit and haven't, so for the time 
+being all the relevant functions can be loaded into the \
+workspace by calling
+<<localFunctions, cache=FALSE, warning=FALSE, message=FALSE>>=
+source('localFunctions.R')
+@
+the fact that this is here may prompt me to getting 
+around to cleaning it up and wrapping it up in package
+form at some point in the future, but probably not in
+the immediate future.
+
+
+\section{Setup and Reading Peaklists}
+
+
+I set the current {\tt dataset\_name} to a variable,
+<<dataset_name>>=
+dataset_name <- "A1"
+@
+
+This reads in peaklist files from 
+\begin{verbatim} 
+<parent_folder_name>/<dataset_name>/<peaklist_folder_name>
+\end{verbatim}
+and returns a combined peaklist {\tt data.frame } object
+after writing the three files: 
+\begin{verbatim} 
+<dataset_name>_comprehensive_peaklist.txt 
+<dataset_name>_fExists.txt
+<dataset_name>_LXY.txt
+\end{verbatim} 
+to 
+\begin{verbatim} 
+./<data_folder>
+\end{verbatim} 
+{\tt dataset\_name } is required, but the other 
+arguments are optional and default to:
+\begin{itemize}
+  \item {\tt peaklist\_folder\_name  = "peaklists" }
+  \item {\tt parent\_folder\_name = "." }
+  \item {\tt data\_folder = "./data" }
+\end{itemize}
+Note that the function {\tt readPeaklists} reads 
+peaklists in batches of $1000$ at a time, and at the 
+end of each batch prints the name of the last peaklist 
+file to inform the user of progress, finally it prints
+the total number of empty peaklists read in.
+
+
+Once created the files written to {\tt data\_folder} 
+can be read in easily by calling
+<<load_data, dependson="dataset_name">>=
+pl_all  <- load_peaklist(dataset_name)
+LXY     <- load_LXY(dataset_name)
+fExists <- load_fExists(dataset_name)
+@
+respectively.
+These {\tt load\_*} functions also accept an optional 
+{\tt data\_folder} argument if an alternative location
+is used to store these files.
+
+
+
+\section{DIPPS}
+
+Now say you have produced some peakgroups one way or
+another, and now you have two regions you want to 
+compare using DIPPS. 
+For example, here I have annotation of the center of 
+cancer tumours stored in an xml `ROI' file.
+So I'll read the annotations into R using the 
+{\tt XML} package and merge them onto the {\tt LXY} 
+variable as a `ROI' column with value `None' for 
+spectra not in any annotated region.
+<<rois, warning=FALSE>>=
+library(XML)
+fname <- 'A1_annotation.xml'
+doc   = xmlInternalTreeParse(fname)
+rois  = xpathSApply(doc,
+                   "/ClinProtSpectraImport/Class",
+                   xmlGetAttr,"Name")
+nSpec = xpathSApply(doc,
+                    "/ClinProtSpectraImport/Class",
+                    xmlSize)
+spec  = xpathSApply(doc,
+                    "/ClinProtSpectraImport/Class/Element",
+                    xmlGetAttr,"Path")
+temp  = data.frame(Peaklist = Peaklist_ID(spec),
+                   ROI = rep(rois,nSpec),
+                   stringsAsFactors = FALSE)
+LXY <- merge(LXY,temp,
+             all.x = TRUE)
+LXY[is.na(LXY$ROI),'ROI'] = "None"
+@
+
+We can take a quick look at these annotations by 
+plotting them. Figure~\ref{fig:plot_rois} demonstrates
+this, as well as providing a simple (less confusing?)
+example of a straightforward way to make spatial plots
+without using my gargantuan {\tt spatialPlot} function
+(although you could equally make this plot using 
+{\tt spatialPlot} if you really wanted to.
+
+<<plot_rois, dependson=c("rois","load_data"), fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
+p = (ggplot(LXY,aes(x=X,y=Y,
+                    fill=ROI,
+                    alpha= 1-(ROI=='None')),
+            colour=NA)
+     + geom_tile()
+     + coord_fixed()
+     + guides(alpha = FALSE)     
+     + scale_x_reverse(breaks=seq(75,175, 50))
+     + scale_y_continuous(breaks=seq(50, 200, 50))
+     + ylab("")
+     + xlab("")
+)
+print(p)
+@
+
+\end{document}

@@ -57,7 +57,7 @@ dataset_name <- "A1"
 @
 
 and then call 
-<<read_data, dependson="dataset_name", cache=TRUE, results='hide'>>=
+<<read_data, dependson="dataset_name", results='hide'>>=
 pl_all <- readPeaklists(dataset_name)
 @
 
@@ -92,7 +92,7 @@ the total number of empty peaklists read in.
 
 Once created the files written to {\tt data\_folder} 
 can be read in easily by calling
-<<load_data, cache=TRUE, dependson="read_data">>=
+<<load_data, dependson="read_data">>=
 pl_all  <- load_peaklist(dataset_name)
 LXY     <- load_LXY(dataset_name)
 fExists <- load_fExists(dataset_name)
@@ -115,7 +115,7 @@ Peaks can be matched to known masses by mass-error.
 In these data for example, there are some internal 
 calibrants of known mass, as described by 
 \cite{Gustafsson2012}.
-<<cal_info, cache=TRUE>>=
+<<cal_info>>=
 cal_df = data.frame(m.z = c(1296.685,
                             1570.677,
                             2147.199,
@@ -130,7 +130,7 @@ cal_df = data.frame(m.z = c(1296.685,
 The function {\tt mzMatch} extracts peaks 
 from the first argument about the $m/z$ values in the 
 second argument.
-<<mass_matching, cache=TRUE, dependson=c("load_data","cal_info")>>=
+<<mass_matching, dependson=c("load_data","cal_info")>>=
 pl_cal <- mzMatch(pl_all,cal_df$m.z)
 @
 Optional arguments {\tt binMargin} (mass error to be 
@@ -148,6 +148,7 @@ Not sure how this would react to overlapping mass
 windows but it was not intended for that.
   
 \subsection{Tolerance Clustering}
+\label{sec:tolClus}
 
 When the masses of interest are not known, peakgroups
 can be formed via a one-dimensional clustering of the
@@ -156,7 +157,7 @@ of the simplest ways of doing this, and boils down to
 finding the equivalence classes of the relation defined
 on two peaks as `being within some tolerance {\tt tol}
 of each other'.
-<<tol_clus, cache=TRUE, dependson="load_data">>=
+<<tol_clus, dependson="load_data">>=
 pl_tol <- groupPeaks(pl_all)
 @
 The optional tolerance argument {\tt tol} defaults to a 
@@ -170,12 +171,13 @@ specifying a peakgroup label.
 
 
 \subsection{{\tt DBSCAN}}
+\label{sec:dbscan}
 
 A more sophisticated clustering approach is to use a 
 density based clustering such as {\tt DBSCAN}, or more
 precisely its deterministic version {\tt DBSCAN*}, as 
 described in \cite{Campello2013}.
-<<dbscan_clus, cache=TRUE, dependson="load_data">>=
+<<dbscan_clus, dependson="load_data">>=
 pl_dbs <- dbscan_lw(pl_all,pp=FALSE)
 @
 The function {\tt dbscan\_lw} works similarly to the 
@@ -200,7 +202,123 @@ default to:
   \item {\tt pp} $=${\tt TRUE}
 \end{itemize}
 
+\subsection{Evaluating Parameter Choices for Peak Grouping}
 
+Both the tolerance clustering of Section~\ref{sec:tolClus}
+and the {\tt DBSCAN} approach of Section~\ref{sec:dbscan}
+involve the choice of a number of tuning parameters, in 
+the former only in grouping tolerance {\tt tol} and in 
+the latter both a grouping tolerance {\tt eps} and a 
+minimum density {\tt mnpts}. In this section I'll 
+demonstrate how to make a heuristic diagnostic plot 
+I use as a sanity check that my parameter selection has
+been somewhat reasonable. First I summarise the peak 
+grouping by calculating a number of statistics for each
+peak group:
+<<pgs, dependson=c("tol_clus","dbscan_clus")>>=
+pgs_tol <- ddply(pl_tol,
+                 "PeakGroup",
+                 summarise,
+                 Range = max(m.z) - min(m.z),
+                 nPeaks  = length(m.z),
+                 nDupPeaks  = (length(m.z) 
+                 - length(unique(Acquisition))))
+pgs_dbs <- ddply(subset(pl_dbs, PeakGroup!=0),
+                 "PeakGroup",
+                 summarise,
+                 Range = max(m.z) - min(m.z),
+                 nPeaks  = length(m.z),
+                 nDupPeaks  = (length(m.z) 
+                 - length(unique(Acquisition))))
+@
+In particular: 
+\begin{itemize}
+ \item The {\tt Range}: the difference between 
+  the minimum and maximum \emph{m/z} in the peak group.
+  \item The {\tt nPeaks}: the number of peaks in the 
+  peak group.
+  \item The {\tt nDupPeaks}: the number of duplicate 
+  peaks, or the number of occurrances of more than one 
+  peak from the same spectrum being included in the 
+  same peakgroup
+\end{itemize}
+Ideally, the {\tt Range} should be small, and the 
+{\tt nDupPeaks} should be zero. 
+In reality, compromises must be made.
+When using the simplistic tolerance clustering 
+approach, optimising parameter choice is 
+correspondingly simple.
+You could for example consider a plot such as 
+Figure~\ref{fig:eval_pgs_tol}:
+<<eval_pgs_tol, dependson="pgs", fig.cap='Plot for heuristic evaluation of peak grouping efficacy: tolerance clustering.', fig.align='center', out.width='0.6\\linewidth'>>=
+p = (ggplot(pgs_tol,aes(x=Range,y=nDupPeaks))
+  + geom_point()
+  + ggtitle(paste('tol:',toString(0.1))))
+print(p)
+@
+The {\tt nPeaks} is also useful as peakgroups with 
+{\tt nPeaks} too small will typically be uninteresting,
+and so you could consider the number of peak groups 
+with at least some threshold value of {\tt nPeaks}, you 
+could apply a similar filter when making a plot such as
+Figure~\ref{fig:eval_pgs_tol} in order to get rid of 
+some of the junk lying around the origin. 
+For peptide data, typically you shouldnt really have 
+any peakgroups with a {\tt Range} above $1$ Da, and any
+half-decent quality peakpicking should allow for you do 
+do peak peaking that keeps the {\tt nDupPeaks} in the 
+single digits, generally speaking. So 
+Figure~\ref{fig:eval_pgs_tol} shows that this is really
+quite terrible, and we should try a smaller value of 
+{\tt tol}. Hopefully, reproducing this analysis with a 
+smaller {\tt tol} will improve these things. 
+Generally, you want to choose a {\tt tol} as large as 
+possible so that the {\tt Range} and {\tt nDupPeaks} 
+are somewhat reasonable. 
+Sometimes this is not possible -- there simply is no 
+happy medium, no value of {\tt tol} for which simple 
+tolerance clustering produces nice peak groups.
+This is usually when using a more sophisticated 
+approach, such as {\tt DBSCAN}, is a good idea.
+Being a more sophisticated approach, it also involves 
+more tuning paramters, more factors to consider.
+We can have a look at Figure~\ref{fig:eval_pgs_dbs}, 
+analogous to Figure~\ref{fig:eval_pgs_tol}:
+<<eval_pgs_dbs, dependson="pgs", fig.cap='Plot for heuristic evaluation of peak grouping efficacy: {\\tt DBSCAN} clustering.', fig.align='center', out.width='0.6\\linewidth'>>=
+p = (ggplot(pgs_dbs,aes(x=Range,y=nDupPeaks))
+  + geom_point()
+  + ggtitle(paste(
+    'eps: ',toString(0.05),
+    ' mn: ',toString(100),
+    ' unassigned: ',
+    toString(sum(pl_dbs$PeakGroup==0)),' (',
+    toString(round(100*sum(pl_dbs$PeakGroup==0)/nrow(pl_dbs),1)),
+    '%)',sep="")))
+print(p)
+@
+The interpretation of Figure~\ref{fig:eval_pgs_dbs} 
+itself is similar to that of Figure~\ref{fig:eval_pgs_tol},
+the main differences are two-fold: 
+\begin{itemize}
+  \item There is an extra tuning parameter (density, {\tt mnpts}) 
+  which can be thought of as the extra degree of freedom allowing
+  us to find nice solutions which cannot be acheived with tolerance
+  clustering alone.
+  
+  \item {\tt DBSCAN} will not allocate some number of peaks to 
+  any peakgroup -- {\tt dbscan\_lw()} will assign these peaks a
+  {\tt PeakGroup} of $0$. As this is essentially throwing 
+  away the information in the peaks, you kinda want to minimise
+  how much data you throw away in order to acheive a nice 
+  peak grouping, so this adds an additional factor into the 
+  equation when trying to tune your tuning parameters.
+\end{itemize}
+When trying to pick some tuning parameters, I will 
+typically produce a bunch of plots like Figure~\ref{fig:eval_pgs_dbs}
+with various (reasonable) choices for tuning parameters and 
+then try to choose a healthy medium between all the different
+factors I'm trying to optimise.
+  
 
 
 
@@ -224,6 +342,7 @@ I provide an example of one use of the function
 using it, although it can do alot more than this -- I 
 plan on coming back and re-writing the plotting 
 functions at some point so they make more sense.
+But good luck on that ever happening, hahaha.
 
 \section{DIPPS}
 
@@ -236,7 +355,7 @@ So I'll read the annotations into R using the
 {\tt XML} package and merge them onto the {\tt LXY} 
 variable as a `ROI' column with value `None' for 
 spectra not in any annotated region.
-<<rois, cache=TRUE, warning=FALSE>>=
+<<rois, warning=FALSE>>=
 library(XML)
 fname <- 'A1_annotation.xml'
 doc   = xmlInternalTreeParse(fname)
@@ -265,18 +384,18 @@ without using my gargantuan {\tt spatialPlot} function
 (although you could equally make this plot using 
 {\tt spatialPlot} if you really wanted to.
 
-<<plot_rois, cache=TRUE, dependson=c("rois","load_data"), fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
+<<plot_rois, dependson=c("rois","load_data"), fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
 p = (ggplot(LXY,aes(x=X,y=Y,
                     fill=ROI,
                     alpha= 1-(ROI=='None')),
             colour=NA)
-     + geom_tile()
-     + coord_fixed()
-     + guides(alpha = FALSE)     
-     + scale_x_reverse(breaks=seq(75,175, 50))
-     + scale_y_continuous(breaks=seq(50, 200, 50))
-     + ylab("")
-     + xlab("")
+  + geom_tile()
+  + coord_fixed()
+  + guides(alpha = FALSE)     
+  + scale_x_reverse(breaks=seq(75,175, 50))
+  + scale_y_continuous(breaks=seq(50, 200, 50))
+  + ylab("")
+  + xlab("")
 )
 print(p)
 @
@@ -300,7 +419,7 @@ it has the three neccessary columns, and that they are
 correctly formatted we can plug this right into the 
 {\tt DIPPS} function.
 
-<<dipps, cache=TRUE, dependson="tol_clus">>=
+<<dipps, dependson="tol_clus">>=
 pl_uni = unique(pl_tol[,c("Acquisition","PeakGroup")])
 temp = match(pl_uni$Acquisition,LXY$Acquisition)
 pl_uni$Group = 1+(LXY[temp,]$ROI != "None")
@@ -330,7 +449,7 @@ features' is in a `DIPPS map', so I might as well
 demonstrate how to do that using the hugely dodgey 
 {\tt spatialPlot} function:
 
-<<dipps_map, cache=TRUE, dependson="dipps", fig.cap='DIPPS Map', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
+<<dipps_map, dependson="dipps", fig.cap='DIPPS Map', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
 dipsum = dipsum[rev(order(dipsum$d)),]
 peakgroups = dipsum[1:nStar,"PeakGroup"]
 plp = pl_uni[!is.na(match(pl_uni$PeakGroup,peakgroups)),]
@@ -342,9 +461,9 @@ p = spatialPlot(plp,
                 minY_in = min(LXY$X)
 )
 p = (p + scale_x_reverse(breaks=seq(75,175, 50))
-     + scale_y_continuous(breaks=seq(50, 200, 50))
-     + ylab("")
-     + xlab("")
+  + scale_y_continuous(breaks=seq(50, 200, 50))
+  + ylab("")
+  + xlab("")
 )
 # DIPPS Map
 print(p)
@@ -354,7 +473,7 @@ One could also produce individual intensity plots of
 particular peakgroups, for example for the peakgroup 
 with highest DIPPS statistic value: 
 
-<<ion_map, cache=TRUE, dependson="dipps_map", fig.cap='Intensity Map for peakgroup most highly ranked by DIPPS', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
+<<ion_map, dependson="dipps_map", fig.cap='Intensity Map for peakgroup most highly ranked by DIPPS', fig.align='center', out.width='0.6\\linewidth', message=FALSE>>=
 plp = subset(pl_tol,PeakGroup==dipsum[1,"PeakGroup"])
 p = spatialPlot(plp,
                 fExists,
@@ -363,9 +482,9 @@ p = spatialPlot(plp,
                 minY_in = min(LXY$X)
 )
 p = (p + scale_x_reverse(breaks=seq(75,175, 50))
-     + scale_y_continuous(breaks=seq(50, 200, 50))
-     + ylab("")
-     + xlab("")
+  + scale_y_continuous(breaks=seq(50, 200, 50))
+  + ylab("")
+  + xlab("")
 )
 # Intensity Map
 print(p)
@@ -377,7 +496,7 @@ following example signal-to-noise ratio) or various
 other statistics for these peakgroups as well if you 
 wanted. For example:
 
-<<awm, cache=TRUE, dependson="dipps_map">>=
+<<awm, dependson="dipps_map">>=
 pg_df = ddply(pl_tol,
               "PeakGroup",
               summarise,
@@ -388,8 +507,8 @@ pg_df = ddply(pl_tol,
 )
 pg_df = merge(pg_df,dipsum)
 pg_df = pg_df[rev(order(pg_df$d)),]
-head(pg_df)
-pg_df[57:61,]
+print(head(pg_df), digits=3)
+print(pg_df[57:61,], digits=3)
 @
 
 In addition to calculating the AWM here I have 
@@ -417,11 +536,11 @@ instead -- I'll leave that as an exercise.
 \bibliography{references}
 \section*{Session Info and pdflatex Version}
 
-<<sessioninfo, echo=TRUE, results='markup',cache=FALSE, size='footnotesize'>>=
+<<sessioninfo, echo=TRUE, results='markup', cache=FALSE, size='footnotesize'>>=
 sessionInfo()
 @
 
-<<pdflatex_version, echo=TRUE, message=TRUE, warning=TRUE,cache=FALSE, size='footnotesize'>>=
+<<pdflatex_version, echo=TRUE, message=TRUE, warning=TRUE, cache=FALSE, size='footnotesize'>>=
 system('pdflatex --version',intern=TRUE)
 @
 
