@@ -2,10 +2,6 @@
 .Rhistory
 *.Rproj
 
-# knitr cache files
-framed.sty
-cache/
-
 # TeX intermediate files
 *.bbl
 *.log
@@ -13,6 +9,7 @@ cache/
 *.tex
 *-concordance.tex
 *.aux
+framed.sty
 
 # Windows image file caches
 Thumbs.db

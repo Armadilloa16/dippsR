@@ -21,5 +21,5 @@ Note that chunk output is stored in
 intial reading in of the peaklists in 
 chunk `read_data', in order to reproduce 
 this one would need to unpack the 
-`A1.7z' archive containing the raw 
+`A1.7z' archive containing the original
 peaklist data.

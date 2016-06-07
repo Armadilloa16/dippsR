@@ -1,5 +1,14 @@
 \documentclass{article}
 
+<<set_default_chunk_options,cache=FALSE,echo=FALSE>>=
+opts_chunk$set(echo=TRUE,
+               warning=TRUE,
+               error=TRUE,
+               message=TRUE,
+               include=TRUE,
+               cache=TRUE)
+@
+
 \begin{document}
 
 \section{Aims}
@@ -11,7 +20,7 @@ So the point of this is multi-faceted:
   the process of analysing peaklist MALDI imaging data 
   during my thesis.
   \item To provide some example code on how (not) to 
-  use R, {\tt knitr}, and \LaTeX together, including 
+  use R, {\tt knitr}, and \LaTeX{}, including 
   referencing using {\tt bibtex}.
 \end{itemize}
 
@@ -30,7 +39,7 @@ Also, I really ought to have wrapped my code up in a
 package, but I am shit and haven't, so for the time 
 being all the relevant functions can be loaded into the \
 workspace by calling
-<<localFunctions, cache=FALSE>>=
+<<localFunctions, cache=FALSE, warning=FALSE, message=FALSE>>=
 source('localFunctions.R')
 @
 the fact that this is here may prompt me to getting 
@@ -43,12 +52,12 @@ the immediate future.
 
 
 I set the current {\tt dataset\_name} to a variable,
-<<dataset_name, cache=TRUE>>=
+<<dataset_name>>=
 dataset_name <- "A1"
 @
 
 and then call 
-<<read_data, dependson="dataset_name", cache=TRUE, include=TRUE>>=
+<<read_data, dependson="dataset_name", cache=TRUE, results='hide'>>=
 pl_all <- readPeaklists(dataset_name)
 @
 
@@ -115,9 +124,7 @@ cal_df = data.frame(m.z = c(1296.685,
                     name = c('Angiotensin I',
                              '[Glu1]-Fibrinopeptide B',
                              'Dynorphin A',
-                             'ACTH fragment (1–24)'
-                    )
-)
+                             'ACTH fragment (1–24)'))
 @
 
 The function {\tt mzMatch} extracts peaks 
@@ -229,7 +236,7 @@ So I'll read the annotations into R using the
 {\tt XML} package and merge them onto the {\tt LXY} 
 variable as a `ROI' column with value `None' for 
 spectra not in any annotated region.
-<<rois, cache=TRUE>>=
+<<rois, cache=TRUE, warning=FALSE>>=
 library(XML)
 fname <- 'A1_annotation.xml'
 doc   = xmlInternalTreeParse(fname)
@@ -258,7 +265,7 @@ without using my gargantuan {\tt spatialPlot} function
 (although you could equally make this plot using 
 {\tt spatialPlot} if you really wanted to.
 
-<<plot_rois, cache=TRUE, dependson="rois", fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
+<<plot_rois, cache=TRUE, dependson=c("rois","load_data"), fig.cap='Annotation Regions', fig.align='center', out.width='0.6\\linewidth'>>=
 p = (ggplot(LXY,aes(x=X,y=Y,
                     fill=ROI,
                     alpha= 1-(ROI=='None')),
@@ -271,7 +278,6 @@ p = (ggplot(LXY,aes(x=X,y=Y,
      + ylab("")
      + xlab("")
 )
-# Annotation Regions
 print(p)
 @
 
