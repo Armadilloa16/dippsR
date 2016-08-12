@@ -65,8 +65,8 @@ This reads in peaklist files from
 \begin{verbatim} 
 <parent_folder_name>/<dataset_name>/<peaklist_folder_name>
 \end{verbatim}
-and returns a combined peaklist {\tt data.frame } object
-after writing the three files: 
+and returns the number of empty spectra after writing 
+the three files: 
 \begin{verbatim} 
 <dataset_name>_comprehensive_peaklist.txt 
 <dataset_name>_fExists.txt
@@ -83,11 +83,6 @@ arguments are optional and default to:
   \item {\tt parent\_folder\_name = "." }
   \item {\tt data\_folder = "./data" }
 \end{itemize}
-Note that the function {\tt readPeaklists} reads 
-peaklists in batches of $1000$ at a time, and at the 
-end of each batch prints the name of the last peaklist 
-file to inform the user of progress, finally it prints
-the total number of empty peaklists read in.
 
 
 Once created the files written to {\tt data\_folder} 

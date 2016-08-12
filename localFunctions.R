@@ -45,7 +45,7 @@ readPeaklists <- function(dataset_name, peaklist_folder_name = "peaklists", pare
                       X = sapply(peaklist_file_names,Xcoord,USE.NAMES=FALSE),
                       Y = sapply(peaklist_file_names,Ycoord,USE.NAMES=FALSE),
                       Acquisition = rep(0,length(peaklist_file_names))
-                      )
+    )
     minX <- min(LXY$X)
     minY <- min(LXY$Y)
     X <- minX:max(LXY$X)
@@ -74,12 +74,15 @@ readPeaklists <- function(dataset_name, peaklist_folder_name = "peaklists", pare
     # Read the peaklist files and compile a comprehensive peaklist #
     ################################################################
     peaklist_not_empty = logical(length=length(peaklist_file_names))
-    peaklist_all_does_not_exist <-TRUE
-    peaklist_temp_does_not_exist <-TRUE
-    count <- 0
+    header_not_written = TRUE
+    
+    # File to write output     
+    peaklist_all = file(paste(data_folder, "/",dataset_name,"_comprehensive_peaklist.txt",sep=""),"w")
+    
     # For each peaklist file
-    for (spec_idx in 1:length(peaklist_file_names)){ 
+    for (spec_idx in 1:length(peaklist_file_names)){       
       fname <- peaklist_file_names[spec_idx]
+      
       # Read the peaklist file
       peaklist_cur <- read.table(paste(peaklist_folder_path,fname,sep="/"), header=TRUE)  
       # Check that it is not empty (no peaks)
@@ -87,48 +90,19 @@ readPeaklists <- function(dataset_name, peaklist_folder_name = "peaklists", pare
         # It's not empty!
         peaklist_not_empty[spec_idx] <- TRUE
         # Annotate peaks with the name of their parent peaklist and acquisition number.
-        peaklist_cur <- transform(peaklist_cur, Peaklist = Peaklist_ID(fname))
         peaklist_cur <- transform(peaklist_cur, Acquisition = LXY[LXY$fname == fname,]$Acquisition)
-        # Add the peaks just read in to a temorary caching variable.
-        if (peaklist_temp_does_not_exist) {
-          peaklist_temp <- peaklist_cur
-          peaklist_temp_does_not_exist <- FALSE
+        # Write peaklist
+        if (header_not_written) {
+          write.table(peaklist_cur,peaklist_all,sep="\t",row.names=FALSE)
+          header_not_written = FALSE          
         } else {
-          peaklist_temp <- rbind(peaklist_temp,peaklist_cur)
+          write.table(peaklist_cur,peaklist_all,sep="\t",row.names=FALSE,col.names=FALSE)
         }
-        count <- count + 1
-      }
-      # Add the cached peaks onto the comprehensive peaklist
-      # In order to fine-tune performance you can tweak "x" in (count == "x"),
-      # depending on how large you expect your peaklist files to be.
-      # This number determines how many peaklist files it will cache before
-      # adding them to the comprehensive peaklist.
-      if (count == 1000){
-        if (peaklist_all_does_not_exist) {
-          peaklist_all <- peaklist_temp
-          peaklist_all_does_not_exist <- FALSE
-        } else {
-          peaklist_all <- rbind(peaklist_all,peaklist_temp)
-        }    
-        count <- 0
-        peaklist_temp_does_not_exist <- TRUE
-        # Diagnostic, each time we combine cached peaks we print the peaklist 
-        # we most recently read to allow you to see progress.
-        print(fname)
       }
     }
-    # add any remaining cached peaks to the comprehensive peaklist.
-    if (peaklist_all_does_not_exist) {
-      peaklist_all <- peaklist_temp
-    } else {
-      peaklist_all <- rbind(peaklist_all,peaklist_temp)
-    }
-    # Diagnostic: Lets you know how many empty peaklists where found total.
-    print(paste(toString(sum(!peaklist_not_empty)),"Empty Peaklists."))
+    close(peaklist_all)
     # could save peaklist_not_empty here, if you needed it for anything later on.
-    write.table(peaklist_all,file=paste(data_folder, "/",dataset_name,"_comprehensive_peaklist.txt",sep=""),
-                sep="\t",row.names=FALSE)
-    return(peaklist_all)
+    return(sum(!peaklist_not_empty))
   }
 }
 
