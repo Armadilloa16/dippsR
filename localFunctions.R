@@ -135,13 +135,16 @@ mzMatch <- function(peaklist_in,mzList,binMargin=0.3,use_ppm=FALSE) {
     if (use_ppm){
       binMargin <- binMargin_ppm*mzList[i]/1000000
     }
-    if (peaklist_subset_does_not_exist){
-      peaklist_subset <- transform(peaklist_in[which(abs(peaklist_in$m.z - mzList[i])<binMargin),],
-                                   PeakGroup=mzList[i])
-      peaklist_subset_does_not_exist = FALSE
-    } else {
-      peaklist_subset <- rbind(peaklist_subset,transform(peaklist_in[which(abs(peaklist_in$m.z - mzList[i])<binMargin),],
-                                                         PeakGroup=mzList[i]))
+    idx = which(abs(peaklist_in$m.z - mzList[i])<binMargin)
+    if (length(idx) > 0){
+      if (peaklist_subset_does_not_exist){
+        peaklist_subset <- transform(peaklist_in[idx,],
+                                     PeakGroup=mzList[i])
+        peaklist_subset_does_not_exist = FALSE
+      } else {
+        peaklist_subset <- rbind(peaklist_subset,transform(peaklist_in[idx,],
+                                                           PeakGroup=mzList[i]))
+      }
     }
   }
   return(peaklist_subset)
