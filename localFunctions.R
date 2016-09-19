@@ -1,16 +1,11 @@
 
 # Author: Lyron Juan Winderbaum, email: lyron.winderbaum@student.adelaide.edu.au
 
-library(stringr)
 library(base)
-library(data.table)
+library(stringr)
 library(reshape2)
 library(ggplot2)
 library(plyr)
-library(grid)
-
-# This finds unique elements in a vector and counts their occurances
-cU <- function(x){ data.table(x)[, .N, keyby= x] }
 
 # These are functions for extracting the X,Y coordinates and Region Numbers from peaklist files.
 Xcoord   <- function(x) as.numeric(substring(str_extract(x,"X\\d{3,4}"),2))
@@ -153,7 +148,7 @@ mzMatch <- function(peaklist_in,mzList,binMargin=0.3,use_ppm=FALSE) {
 
 # Does a peak-grouping, and annotates peaks by peakgroup, in case you want that.
 # If you set a non-zero minGroupSize here any peaks not allocated to groups will be 
-# annotates peakgroup zero. This can always be done later though, with the cU function 
+# annotates peakgroup zero. This can always be done later though, with the table function 
 # in the localFunctions.R file for example, so I reccomend leaving minGroupSize = 0 here.
 # You could modify tol (the tolerance used) if you wish however.
 groupPeaks <- function(peaklist_in,tol = 0.1, minGroupSize = 0) {
@@ -163,7 +158,7 @@ groupPeaks <- function(peaklist_in,tol = 0.1, minGroupSize = 0) {
   for (i in which(peaklist_in[2:nPeaks,]$m.z - peaklist_in[1:(nPeaks-1),]$m.z > tol)){
     peaklist_in$PeakGroup[(i+1):nPeaks] <- peaklist_in$PeakGroup[(i+1):nPeaks] + 1 
   }
-  for (p in which(cU(peaklist_in$PeakGroup)$N < minGroupSize)){
+  for (p in which(as.vector(table(peaklist_in$PeakGroup)) < minGroupSize)){
     peaklist_in[which(peaklist_in$PeakGroup == p),]$PeakGroup <- 0
   }
   return(peaklist_in)
@@ -362,14 +357,13 @@ spatialPlot <- function(peaklist_in,fExists_in,
     print("In order to use non-standard methods the spatialPlot() function will need to be modified.")          
   }
   
-  temp = cU(peaklist_in$Acquisition)
   # Deal with multiple peaks.
-  
+  temp = as.vector(table(peaklist_in$Acquisition))
   if (plot_var_type == "continuous"){
     if (plot_var == "count") {
       peaklist_in$count = 1
     }
-    if (sum(temp$N>1) > 0) {
+    if (sum(temp>1) > 0) {
       peaklist_in <- switch(mult_peaks,
                             average = switch(plot_var,
                                              m.z           = ddply(peaklist_in,"Acquisition",summarise,m.z = mean(m.z)),
@@ -398,7 +392,7 @@ spatialPlot <- function(peaklist_in,fExists_in,
                             )
       )
     }
-  } else if (sum(temp$N>1) > 0) {
+  } else if (sum(temp>1) > 0) {
     stop("In order to plot categorical variables spectra must be uniquely specified.")
   }
   
@@ -558,12 +552,12 @@ acquisitionPlot <- function(peaklist_in,
   }
   
   # Generate an image matrix mI
-  temp = cU(peaklist_in$Acquisition)
+  temp = as.vector(table(peaklist_in$Acquisition))
   # Deal with multiple peaks.
   if (plot_var == "count") {
     peaklist_in$count = 1
   }
-  if (sum(temp$N>1) > 0) {
+  if (sum(temp>1) > 0) {
     peaklist_in <- switch(mult_peaks,
                           average = switch(plot_var,
                                            m.z           = ddply(peaklist_in,c("Acquisition","Peaklist"),summarise,m.z = mean(m.z)),
